@@ -2873,6 +2873,9 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
     StringCQ += get_sorted_header_keys(requestHeaders) + "\n";
     StringCQ += payload_hash;
 
+    S3FS_PRN_INFO3("canonical request DEBUG %s.", StringCQ.c_str());
+
+
     std::string   kSecret = "AWS4" + secret_access_key;
     unsigned int  kDate_len,kRegion_len, kService_len, kSigning_len = 0;
 
@@ -2898,6 +2901,37 @@ std::string S3fsCurl::CalcSignature(const std::string& method, const std::string
     std::unique_ptr<unsigned char[]> md = s3fs_HMAC256(kSigning.get(), kSigning_len, cscope, cscope_len, &md_len);
 
     return s3fs_hex_lower(md.get(), md_len);
+}
+
+std::string S3fsCurl::extractURI(const std::string& url) {
+    // If the URL is empty, return "/"
+    if (url.empty()) {
+        return "/";
+    }
+
+    // Find the position of "://"
+    std::size_t protocol_pos = url.find("://");
+    if (protocol_pos == std::string::npos) {
+        // If "://" is not found, return "/"
+        return "/";
+    }
+
+    // Find the position of the first "/" after "://"
+    std::size_t uri_pos = url.find('/', protocol_pos + 3);
+    if (uri_pos == std::string::npos) {
+        // If no "/" is found after the domain, return "/"
+        return "/";
+    }
+
+    // Extract the URI
+    std::string uri = url.substr(uri_pos);
+
+    // Ensure the URI ends with "/"
+    if (uri.back() != '/') {
+        uri += '/';
+    }
+
+    return uri;
 }
 
 void S3fsCurl::insertV4Headers(const std::string& access_key_id, const std::string& secret_access_key, const std::string& access_token)
@@ -2944,7 +2978,7 @@ void S3fsCurl::insertV4Headers(const std::string& access_key_id, const std::stri
     get_date_sigv3(strdate, date8601);
 
     std::string contentSHA256 = payload_hash.empty() ? EMPTY_PAYLOAD_HASH : payload_hash;
-    const std::string realpath = pathrequeststyle ? "/" + S3fsCred::GetBucket() + server_path : server_path;
+    const std::string realpath = pathrequeststyle ? extractURI(s3host) + S3fsCred::GetBucket() + server_path : server_path;
 
     //string canonical_headers, signed_headers;
     requestHeaders = curl_slist_sort_insert(requestHeaders, "host", get_bucket_host().c_str());
